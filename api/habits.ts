@@ -13,7 +13,7 @@ export default async function handler(req, res) {
             const { name, category, frequency, goal } = req.body;
             const newHabit = await db.insert(habits).values({
                 name,
-                category,
+                category: category || 'General',
                 frequency,
                 goal,
             }).returning();
