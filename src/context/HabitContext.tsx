@@ -1,78 +1,121 @@
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode, useState, useEffect } from 'react';
 import { Habit, HabitLog, HabitStats } from '../types';
-import { useLocalStorage } from '../hooks/useLocalStorage';
 import { calculateStreak } from '../utils/streakUtils';
-
-// Simple ID generator if uuid not available
-const generateId = () => Math.random().toString(36).substr(2, 9);
+import { api } from '../api/client';
 
 interface HabitContextType {
     habits: Habit[];
     logs: HabitLog[];
-    addHabit: (habit: Omit<Habit, 'id' | 'archived'>) => void;
-    updateHabit: (id: string, updates: Partial<Habit>) => void;
-    deleteHabit: (id: string) => void;
-    renameCategory: (oldCategory: string, newCategory: string) => void;
-    toggleHabitCompletion: (habitId: string, date: string, value?: number) => void;
+    isLoading: boolean;
+    error: string | null;
+    addHabit: (habit: Omit<Habit, 'id' | 'archived'>) => Promise<void>;
+    updateHabit: (id: string, updates: Partial<Habit>) => Promise<void>;
+    deleteHabit: (id: string) => Promise<void>;
+    renameCategory: (oldCategory: string, newCategory: string) => Promise<void>;
+    toggleHabitCompletion: (habitId: string, date: string, value?: number) => Promise<void>;
     getHabitStats: (habitId: string) => HabitStats;
 }
 
 const HabitContext = createContext<HabitContextType | undefined>(undefined);
 
 export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [habits, setHabits] = useLocalStorage<Habit[]>('habits', []);
-    const [logs, setLogs] = useLocalStorage<HabitLog[]>('habit_logs', []);
+    const [habits, setHabits] = useState<Habit[]>([]);
+    const [logs, setLogs] = useState<HabitLog[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-    const addHabit = (habitData: Omit<Habit, 'id' | 'archived'>) => {
-        const newHabit: Habit = {
-            ...habitData,
-            id: generateId(),
-            archived: false,
+    // Initial Fetch
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                setIsLoading(true);
+                const [habitsData, logsData] = await Promise.all([
+                    api.habits.list(),
+                    api.logs.list()
+                ]);
+                setHabits(habitsData);
+                setLogs(logsData);
+            } catch (err) {
+                console.error(err);
+                setError('Failed to load habits data');
+            } finally {
+                setIsLoading(false);
+            }
         };
-        setHabits([...habits, newHabit]);
+        loadData();
+    }, []);
+
+    const addHabit = async (habitData: Omit<Habit, 'id' | 'archived'>) => {
+        try {
+            const newHabit = await api.habits.create(habitData);
+            setHabits(prev => [...prev, newHabit]);
+        } catch (err) {
+            console.error(err);
+            setError('Failed to create habit');
+        }
     };
 
-    const updateHabit = (id: string, updates: Partial<Habit>) => {
-        setHabits(habits.map(h => (h.id === id ? { ...h, ...updates } : h)));
+    const updateHabit = async (id: string, updates: Partial<Habit>) => {
+        try {
+            const updated = await api.habits.update(id, updates);
+            setHabits(prev => prev.map(h => h.id === id ? updated : h));
+        } catch (err) {
+            console.error(err);
+            setError('Failed to update habit');
+        }
     };
 
-    const deleteHabit = (id: string) => {
-        setHabits(habits.filter(h => h.id !== id));
-        setLogs(logs.filter(l => l.habitId !== id)); // Cleanup logs?
+    const deleteHabit = async (id: string) => {
+        try {
+            await api.habits.delete(id);
+            setHabits(prev => prev.filter(h => h.id !== id));
+            setLogs(prev => prev.filter(l => l.habitId !== id));
+        } catch (err) {
+            console.error(err);
+            setError('Failed to delete habit');
+        }
     };
 
-    const renameCategory = (oldCategory: string, newCategory: string) => {
-        setHabits(habits.map(h =>
-            (h.category === oldCategory) ? { ...h, category: newCategory } : h
-        ));
+    const renameCategory = async (oldCategory: string, newCategory: string) => {
+        try {
+            // Optimistic update
+            setHabits(prev => prev.map(h =>
+                h.category === oldCategory ? { ...h, category: newCategory } : h
+            ));
+
+            // In backend we would probably need a bulk update endpoint, 
+            // but for now we iterate (not efficient but functionally correct for MVP)
+            const habitsToUpdate = habits.filter(h => h.category === oldCategory);
+            await Promise.all(habitsToUpdate.map(h => api.habits.update(h.id, { category: newCategory })));
+        } catch (err) {
+            console.error(err);
+            setError('Failed to rename category');
+            // Revert on error? Skipping for now
+        }
     };
 
-    const toggleHabitCompletion = (habitId: string, date: string, value: number = 1) => {
-        const existingLogIndex = logs.findIndex(l => l.habitId === habitId && l.date === date);
+    const toggleHabitCompletion = async (habitId: string, date: string, value: number = 1) => {
+        // Optimistic UI update could be added here for speed, 
+        // but for safety we'll wait for server.
+        try {
+            const result = await api.logs.toggle(habitId, date, value);
 
-        if (existingLogIndex >= 0) {
-            if (value === 0) {
-                // Remove log if value is 0 (toggle off or clear)
-                // Filter out the specific log entry
-                setLogs(logs.filter((l) => !(l.habitId === habitId && l.date === date)));
-            } else {
-                // Update value
-                const newLogs = [...logs];
-                newLogs[existingLogIndex] = { ...newLogs[existingLogIndex], value };
-                setLogs(newLogs);
+            if (result.deleted) {
+                setLogs(prev => prev.filter(l => !(l.habitId === habitId && l.date === date)));
+            } else if (result.id) {
+                // Check if it was an update or insert
+                setLogs(prev => {
+                    const exists = prev.some(l => l.habitId === habitId && l.date === date);
+                    if (exists) {
+                        return prev.map(l => (l.habitId === habitId && l.date === date) ? result : l);
+                    } else {
+                        return [...prev, result];
+                    }
+                });
             }
-        } else {
-            // Only add if value > 0
-            if (value > 0) {
-                const newLog: HabitLog = {
-                    id: generateId(),
-                    habitId,
-                    date,
-                    value,
-                    timestamp: Date.now(),
-                };
-                setLogs([...logs, newLog]);
-            }
+        } catch (err) {
+            console.error(err);
+            setError('Failed to toggle completion');
         }
     };
 
@@ -87,15 +130,15 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
         return {
             currentStreak: streak,
-            longestStreak: streak, // TODO: calculate historical max?
-            totalCompletions: habitLogs.length, // Rough count
-            complianceRate: 0, // TODO
-            lastCompletedDate: habitLogs.length > 0 ? habitLogs.sort((a, b) => b.timestamp - a.timestamp)[0].date : null
+            longestStreak: streak, // TODO: calculate historical max
+            totalCompletions: habitLogs.length,
+            complianceRate: 0,
+            lastCompletedDate: habitLogs.length > 0 ? habitLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0].date : null
         };
     };
 
     return (
-        <HabitContext.Provider value={{ habits, logs, addHabit, updateHabit, deleteHabit, toggleHabitCompletion, getHabitStats, renameCategory }}>
+        <HabitContext.Provider value={{ habits, logs, isLoading, error, addHabit, updateHabit, deleteHabit, toggleHabitCompletion, getHabitStats, renameCategory }}>
             {children}
         </HabitContext.Provider>
     );

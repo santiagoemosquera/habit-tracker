@@ -4,17 +4,28 @@ import TaskSection from '../components/timer/TaskSection';
 import TimerSettings from '../components/timer/TimerSettings';
 import { Task } from '../types/timer';
 import { useTimer } from '../context/TimerContext';
+import { api } from '../api/client';
 
 const TimerView: React.FC = () => {
-    // Persistent State: Tasks (Still local for now, could be moved to context if needed globally)
-    const [tasks, setTasks] = useState<Task[]>(() => {
-        const saved = localStorage.getItem('timer_tasks');
-        return saved ? JSON.parse(saved) : [];
-    });
+    // Tasks State (Now fetched from API)
+    const [tasks, setTasks] = useState<Task[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
+    // Initial Fetch
     useEffect(() => {
-        localStorage.setItem('timer_tasks', JSON.stringify(tasks));
-    }, [tasks]);
+        const loadTasks = async () => {
+            try {
+                setIsLoading(true);
+                const data = await api.tasks.list();
+                setTasks(data);
+            } catch (err) {
+                console.error('Failed to load tasks', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadTasks();
+    }, []);
 
     // Consume Timer Context
     const {
@@ -27,12 +38,12 @@ const TimerView: React.FC = () => {
         toggleTimer,
         resetTimer,
         skip,
-        setMode // Exposed just in case, but usually handled internally/via skip
+        setMode
     } = useTimer();
 
     const [showSettings, setShowSettings] = useState(false);
 
-    // Initial permission check (could be in context too but fine here)
+    // Initial permission check
     useEffect(() => {
         if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
             Notification.requestPermission();
@@ -40,23 +51,34 @@ const TimerView: React.FC = () => {
     }, []);
 
     // Task Handlers
-    const handleAddTask = (taskInput: Omit<Task, 'id' | 'createdAt' | 'status' | 'completedPomodoros'>) => {
-        const newTask: Task = {
-            ...taskInput,
-            id: crypto.randomUUID(),
-            createdAt: Date.now(),
-            status: 'pending',
-            completedPomodoros: 0
-        };
-        setTasks(prev => [newTask, ...prev]);
+    const handleAddTask = async (taskInput: Omit<Task, 'id' | 'createdAt' | 'status' | 'completedPomodoros'>) => {
+        try {
+            const newTask = await api.tasks.create(taskInput);
+            setTasks(prev => [newTask, ...prev]);
+        } catch (err) {
+            console.error('Failed to add task', err);
+        }
     };
 
-    const handleUpdateTask = (id: string, updates: Partial<Task>) => {
-        setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    const handleUpdateTask = async (id: string, updates: Partial<Task>) => {
+        try {
+            // Optimistic update
+            setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+            await api.tasks.update(id, updates);
+        } catch (err) {
+            console.error('Failed to update task', err);
+            // Could revert here
+        }
     };
 
-    const handleDeleteTask = (id: string) => {
-        setTasks(prev => prev.filter(t => t.id !== id));
+    const handleDeleteTask = async (id: string) => {
+        try {
+            // Optimistic update
+            setTasks(prev => prev.filter(t => t.id !== id));
+            await api.tasks.delete(id);
+        } catch (err) {
+            console.error('Failed to delete task', err);
+        }
     };
 
     return (
@@ -66,9 +88,6 @@ const TimerView: React.FC = () => {
                     <TimerDisplay
                         timeLeft={timeLeft}
                         duration={
-                            // Duration calculation logic duplicated here for display helper? 
-                            // Or better to export getDurationForMode from context?
-                            // Simple fix: calculate locally based on config and mode
                             (mode === 'focus' ? config.focusDuration :
                                 mode === 'shortBreak' ? config.shortBreakDuration :
                                     config.longBreakDuration) * 60
@@ -87,12 +106,18 @@ const TimerView: React.FC = () => {
                 </div>
 
                 <div>
-                    <TaskSection
-                        tasks={tasks}
-                        onAddTask={handleAddTask}
-                        onUpdateTask={handleUpdateTask}
-                        onDeleteTask={handleDeleteTask}
-                    />
+                    {isLoading ? (
+                        <div className="flex justify-center p-8">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                        </div>
+                    ) : (
+                        <TaskSection
+                            tasks={tasks}
+                            onAddTask={handleAddTask}
+                            onUpdateTask={handleUpdateTask}
+                            onDeleteTask={handleDeleteTask}
+                        />
+                    )}
                 </div>
             </div>
 
