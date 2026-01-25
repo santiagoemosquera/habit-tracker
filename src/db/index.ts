@@ -5,5 +5,11 @@ import * as dotenv from 'dotenv';
 
 dotenv.config();
 
-const sql = neon(process.env.DATABASE_URL!);
+const connectionString = process.env.DATABASE_URL || "";
+
+if (!connectionString) {
+    console.error("DATABASE_URL is not set");
+}
+
+const sql = neon(connectionString);
 export const db = drizzle(sql, { schema });
