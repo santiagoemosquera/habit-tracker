@@ -1,5 +1,5 @@
-import { db } from '../src/db';
-import { habitLogs } from '../src/db/schema';
+import { db } from '../src/db/index.ts';
+import { habitLogs } from '../src/db/schema.ts';
 import { eq, and } from 'drizzle-orm';
 
 export default async function handler(req, res) {
