@@ -1,6 +1,6 @@
-import { db } from '../src/db/index.ts';
+import { db } from '../src/db/index.js';
 
-export default async function handler(req, res) {
+export default async function handler(req: any, res: any) {
     try {
         // Just check if db is defined, don't query yet
         const isDbDefined = !!db;

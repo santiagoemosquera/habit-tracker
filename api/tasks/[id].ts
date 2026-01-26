@@ -1,8 +1,8 @@
-import { db } from '../../src/db/index.ts';
-import { tasks } from '../../src/db/schema.ts';
+import { db } from '../../src/db/index.js';
+import { tasks } from '../../src/db/schema.js';
 import { eq } from 'drizzle-orm';
 
-export default async function handler(req, res) {
+export default async function handler(req: any, res: any) {
     const { id } = req.query;
 
     if (!id) {

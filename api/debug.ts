@@ -1,8 +1,8 @@
-import { db } from '../src/db/index.ts';
-import { habits } from '../src/db/schema.ts';
+import { db } from '../src/db/index.js';
+import { habits } from '../src/db/schema.js';
 import { sql } from 'drizzle-orm';
 
-export default async function handler(req, res) {
+export default async function handler(req: any, res: any) {
     try {
         const dbUrlExists = !!process.env.DATABASE_URL;
         // Mask the URL for safety if we were to return it, but just boolean is safer.
