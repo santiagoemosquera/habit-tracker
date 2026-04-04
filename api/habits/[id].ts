@@ -1,5 +1,5 @@
 import { db } from '../../src/db/index.js';
-import { habits } from '../../src/db/schema.js';
+import { habits, habitLogs } from '../../src/db/schema.js';
 import { eq } from 'drizzle-orm';
 
 export default async function handler(req: any, res: any) {
@@ -21,6 +21,7 @@ export default async function handler(req: any, res: any) {
         }
 
         if (req.method === 'DELETE') {
+            await db.delete(habitLogs).where(eq(habitLogs.habitId, id));
             await db.delete(habits).where(eq(habits.id, id));
             return res.status(204).end();
         }
