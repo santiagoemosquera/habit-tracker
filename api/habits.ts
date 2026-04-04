@@ -10,12 +10,15 @@ export default async function handler(req: any, res: any) {
         }
 
         if (req.method === 'POST') {
-            const { name, category, frequency, goal } = req.body;
+            const { name, category, frequency, goal, metricType, targetValue, unit } = req.body;
             const newHabit = await db.insert(habits).values({
                 name,
                 category: category || 'General',
                 frequency,
                 goal,
+                metricType: metricType || 'boolean',
+                targetValue: targetValue || 1,
+                unit: unit || null,
             }).returning();
             return res.status(201).json(newHabit[0]);
         }

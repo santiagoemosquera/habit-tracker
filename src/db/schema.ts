@@ -9,6 +9,9 @@ export const habits = pgTable("habits", {
     category: text("category").notNull(),
     frequency: text("frequency").notNull(), // 'daily' | 'weekly'
     goal: integer("goal").notNull(),
+    metricType: text("metric_type").notNull().default("boolean"), // 'boolean' | 'numeric'
+    targetValue: integer("target_value").notNull().default(1),
+    unit: text("unit"),
     archived: boolean("archived").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
