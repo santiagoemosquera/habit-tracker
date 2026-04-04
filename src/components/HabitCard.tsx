@@ -14,7 +14,7 @@ interface HabitCardProps {
 }
 
 const HabitCard: React.FC<HabitCardProps> = ({ habit }) => {
-    const { toggleHabitCompletion, getHabitStats, logs } = useHabits();
+    const { toggleHabitCompletion, getHabitStats, logs, deleteHabit } = useHabits();
     const navigate = useNavigate();
     const [isExpanded, setIsExpanded] = useState(false);
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -116,6 +116,18 @@ const HabitCard: React.FC<HabitCardProps> = ({ habit }) => {
                                 title="Settings"
                             >
                                 <Settings size={14} />
+                            </button>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (confirm(`¿Eliminar el hábito "${habit.name}"? Esta acción no se puede deshacer.`)) {
+                                        deleteHabit(habit.id);
+                                    }
+                                }}
+                                className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 transition-opacity"
+                                title="Eliminar hábito"
+                            >
+                                <Trash2 size={14} />
                             </button>
                         </div>
 
