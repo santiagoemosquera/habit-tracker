@@ -44,6 +44,8 @@ export const TimerProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const [pomodorosCompleted, setPomodorosCompleted] = useState(0);
 
     const timerRef = useRef<number | null>(null);
+    const startTimestampRef = useRef<number | null>(null);
+    const initialTimeLeftRef = useRef<number>(0);
 
     const getDurationForMode = (m: TimerMode) => {
         switch (m) {
@@ -92,21 +94,47 @@ export const TimerProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
 
     useEffect(() => {
-        let interval: number;
         if (isActive && timeLeft > 0) {
-            interval = window.setInterval(() => {
-                setTimeLeft((prev) => prev - 1);
-            }, 1000);
+            // Initialize wall-clock reference if not already set (fresh start or resume)
+            if (startTimestampRef.current === null) {
+                startTimestampRef.current = Date.now();
+                initialTimeLeftRef.current = timeLeft;
+            }
+
+            const interval = window.setInterval(() => {
+                const elapsed = Math.floor((Date.now() - startTimestampRef.current!) / 1000);
+                const newTimeLeft = Math.max(0, initialTimeLeftRef.current - elapsed);
+                setTimeLeft(newTimeLeft);
+            }, 500);
+
+            const handleVisibilityChange = () => {
+                if (!document.hidden && startTimestampRef.current !== null) {
+                    const elapsed = Math.floor((Date.now() - startTimestampRef.current) / 1000);
+                    setTimeLeft(Math.max(0, initialTimeLeftRef.current - elapsed));
+                }
+            };
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+
+            return () => {
+                clearInterval(interval);
+                document.removeEventListener('visibilitychange', handleVisibilityChange);
+            };
         } else if (timeLeft === 0 && isActive) {
+            startTimestampRef.current = null;
             setIsActive(false);
             handleTimerComplete();
+        } else {
+            startTimestampRef.current = null;
         }
-        return () => clearInterval(interval);
-    }, [isActive, timeLeft, mode, config]); // mode and config dependencies are needed for handleTimerComplete closure capture if not careful, but simplified here.
+    }, [isActive, timeLeft, mode, config]);
 
-    const toggleTimer = () => setIsActive(!isActive);
+    const toggleTimer = () => {
+        if (isActive) startTimestampRef.current = null; // reset on pause
+        setIsActive(!isActive);
+    };
 
     const resetTimer = () => {
+        startTimestampRef.current = null;
         setIsActive(false);
         setTimeLeft(getDurationForMode(mode) * 60);
     };
