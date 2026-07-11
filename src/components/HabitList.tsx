@@ -4,9 +4,11 @@ import HabitCard from './HabitCard';
 import { Edit2, Check, X } from 'lucide-react';
 
 const HabitList: React.FC = () => {
-    const { habits, renameCategory } = useHabits();
+    const { habits, renameCategory, reorderHabits } = useHabits();
     const [editingCategory, setEditingCategory] = useState<string | null>(null);
     const [editValue, setEditValue] = useState('');
+    const [draggedId, setDraggedId] = useState<string | null>(null);
+    const [dragOverId, setDragOverId] = useState<string | null>(null);
 
     const activeHabits = habits.filter(h => !h.archived);
 
@@ -19,6 +21,37 @@ const HabitList: React.FC = () => {
         acc[category].push(habit);
         return acc;
     }, {} as Record<string, typeof activeHabits>);
+
+    // Sort within each category by saved order (stable, so ties keep server order)
+    Object.keys(groupedHabits).forEach(category => {
+        groupedHabits[category].sort((a, b) => a.order - b.order);
+    });
+
+    const handleDrop = (category: string, targetId: string) => {
+        if (!draggedId || draggedId === targetId) {
+            setDraggedId(null);
+            setDragOverId(null);
+            return;
+        }
+
+        const categoryHabits = groupedHabits[category];
+        const ids = categoryHabits.map(h => h.id);
+        const fromIndex = ids.indexOf(draggedId);
+        const toIndex = ids.indexOf(targetId);
+        if (fromIndex === -1 || toIndex === -1) {
+            setDraggedId(null);
+            setDragOverId(null);
+            return;
+        }
+
+        const reordered = [...ids];
+        reordered.splice(fromIndex, 1);
+        reordered.splice(toIndex, 0, draggedId);
+
+        reorderHabits(reordered);
+        setDraggedId(null);
+        setDragOverId(null);
+    };
 
     // Order categories nicely if we can, or just alphabetical
     const categories = Object.keys(groupedHabits).sort((a, b) => {
@@ -92,7 +125,29 @@ const HabitList: React.FC = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {groupedHabits[category].map(habit => (
-                            <HabitCard key={habit.id} habit={habit} />
+                            <HabitCard
+                                key={habit.id}
+                                habit={habit}
+                                isDragOver={dragOverId === habit.id}
+                                onDragStart={(e) => {
+                                    e.dataTransfer.effectAllowed = 'move';
+                                    setDraggedId(habit.id);
+                                }}
+                                onDragOver={(e) => {
+                                    e.preventDefault();
+                                    if (draggedId && draggedId !== habit.id) {
+                                        setDragOverId(habit.id);
+                                    }
+                                }}
+                                onDrop={(e) => {
+                                    e.preventDefault();
+                                    handleDrop(category, habit.id);
+                                }}
+                                onDragEnd={() => {
+                                    setDraggedId(null);
+                                    setDragOverId(null);
+                                }}
+                            />
                         ))}
                     </div>
                 </div>

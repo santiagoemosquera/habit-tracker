@@ -12,6 +12,7 @@ export const habits = pgTable("habits", {
     metricType: text("metric_type").notNull().default("boolean"), // 'boolean' | 'numeric'
     targetValue: integer("target_value").notNull().default(1),
     unit: text("unit"),
+    order: integer("order").notNull().default(0),
     archived: boolean("archived").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });

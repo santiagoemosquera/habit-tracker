@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Habit } from '../types';
 import { useHabits } from '../context/HabitContext';
-import { Check, Flame, Plus, Minus, Calendar as CalendarIcon, ChevronDown, Trash2, Settings } from 'lucide-react';
+import { Check, Flame, Plus, Minus, Calendar as CalendarIcon, ChevronDown, Trash2, Settings, GripVertical } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,9 +11,14 @@ import AddHabitModal from './AddHabitModal';
 
 interface HabitCardProps {
     habit: Habit;
+    onDragStart?: (e: React.DragEvent) => void;
+    onDragOver?: (e: React.DragEvent) => void;
+    onDrop?: (e: React.DragEvent) => void;
+    onDragEnd?: (e: React.DragEvent) => void;
+    isDragOver?: boolean;
 }
 
-const HabitCard: React.FC<HabitCardProps> = ({ habit }) => {
+const HabitCard: React.FC<HabitCardProps> = ({ habit, onDragStart, onDragOver, onDrop, onDragEnd, isDragOver }) => {
     const { toggleHabitCompletion, getHabitStats, logs, deleteHabit } = useHabits();
     const navigate = useNavigate();
     const [isExpanded, setIsExpanded] = useState(false);
@@ -89,13 +94,26 @@ const HabitCard: React.FC<HabitCardProps> = ({ habit }) => {
                 className={cn(
                     "bg-white dark:bg-zinc-900 rounded-2xl p-5 border shadow-sm transition-shadow hover:shadow-md cursor-pointer group", // Added group for hover effects
                     isCompletedForDate ? "border-green-200 bg-green-50/20 dark:bg-green-900/10 dark:border-green-800" : "border-slate-200 dark:border-zinc-800",
-                    !isTodaySelected && "ring-2 ring-indigo-100 dark:ring-indigo-900" // Visual cue when editing history
+                    !isTodaySelected && "ring-2 ring-indigo-100 dark:ring-indigo-900", // Visual cue when editing history
+                    isDragOver && "ring-2 ring-indigo-400"
                 )}
                 onClick={() => setIsExpanded(!isExpanded)}
+                onDragOver={onDragOver}
+                onDrop={onDrop}
             >
                 <div className="flex justify-between items-start mb-2">
                     <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
+                            <span
+                                draggable
+                                onClick={(e) => e.stopPropagation()}
+                                onDragStart={onDragStart}
+                                onDragEnd={onDragEnd}
+                                className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 dark:text-zinc-700 dark:hover:text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity -ml-1"
+                                title="Arrastrar para reordenar"
+                            >
+                                <GripVertical size={16} />
+                            </span>
                             <h3
                                 onClick={(e) => { e.stopPropagation(); navigate(`/habits/${habit.id}`); }}
                                 className="font-bold text-lg text-slate-800 dark:text-slate-100 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors cursor-pointer underline decoration-dotted decoration-slate-300 hover:decoration-indigo-500"

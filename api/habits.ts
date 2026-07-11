@@ -1,11 +1,11 @@
 import { db } from '../src/db/index.js';
 import { habits } from '../src/db/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 
 export default async function handler(req: any, res: any) {
     try {
         if (req.method === 'GET') {
-            const allHabits = await db.select().from(habits);
+            const allHabits = await db.select().from(habits).orderBy(asc(habits.order), asc(habits.createdAt));
             return res.status(200).json(allHabits);
         }
 

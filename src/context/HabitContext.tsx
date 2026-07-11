@@ -12,6 +12,7 @@ interface HabitContextType {
     updateHabit: (id: string, updates: Partial<Habit>) => Promise<void>;
     deleteHabit: (id: string) => Promise<void>;
     renameCategory: (oldCategory: string, newCategory: string) => Promise<void>;
+    reorderHabits: (orderedIds: string[]) => Promise<void>;
     toggleHabitCompletion: (habitId: string, date: string, value?: number) => Promise<void>;
     getHabitStats: (habitId: string) => HabitStats;
 }
@@ -94,6 +95,24 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         }
     };
 
+    const reorderHabits = async (orderedIds: string[]) => {
+        const orderById = new Map(orderedIds.map((id, index) => [id, index]));
+
+        // Optimistic update
+        setHabits(prev => prev.map(h =>
+            orderById.has(h.id) ? { ...h, order: orderById.get(h.id)! } : h
+        ));
+
+        try {
+            await Promise.all(
+                orderedIds.map((id, index) => api.habits.update(id, { order: index }))
+            );
+        } catch (err) {
+            console.error(err);
+            setError('Failed to reorder habits');
+        }
+    };
+
     const toggleHabitCompletion = async (habitId: string, date: string, value: number = 1) => {
         // Optimistic UI update could be added here for speed, 
         // but for safety we'll wait for server.
@@ -138,7 +157,7 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
 
     return (
-        <HabitContext.Provider value={{ habits, logs, isLoading, error, addHabit, updateHabit, deleteHabit, toggleHabitCompletion, getHabitStats, renameCategory }}>
+        <HabitContext.Provider value={{ habits, logs, isLoading, error, addHabit, updateHabit, deleteHabit, toggleHabitCompletion, getHabitStats, renameCategory, reorderHabits }}>
             {children}
         </HabitContext.Provider>
     );

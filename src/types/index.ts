@@ -12,6 +12,7 @@ export interface Habit {
     unit?: string; // e.g., "pages", "liters", "minutes"
     targetValue: number; // e.g. 1 (for boolean), 20 (pages)
     startDate: string; // ISO Date string
+    order: number;
     archived: boolean;
     color?: string;
     icon?: string;
