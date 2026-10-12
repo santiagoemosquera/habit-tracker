@@ -1,7 +1,8 @@
-import React, { createContext, useContext, ReactNode, useState, useEffect } from 'react';
+import React, { createContext, useContext, ReactNode, useState, useEffect, useRef } from 'react';
 import { Habit, HabitLog, HabitStats } from '../types';
 import { calculateStreak } from '../utils/streakUtils';
 import { api } from '../api/client';
+import { useGame } from './GameContext';
 
 interface HabitContextType {
     habits: Habit[];
@@ -24,6 +25,7 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const [logs, setLogs] = useState<HabitLog[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const { applyGame } = useGame();
 
     // Initial Fetch
     useEffect(() => {
@@ -113,29 +115,43 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         }
     };
 
-    const toggleHabitCompletion = async (habitId: string, date: string, value: number = 1) => {
-        // Optimistic UI update could be added here for speed, 
-        // but for safety we'll wait for server.
-        try {
-            const result = await api.logs.toggle(habitId, date, value);
+    const upsertLocalLog = (habitId: string, date: string, log: HabitLog | null) => {
+        setLogs(prev => {
+            const others = prev.filter(l => !(l.habitId === habitId && l.date === date));
+            return log ? [...others, log] : others;
+        });
+    };
 
-            if (result.deleted) {
-                setLogs(prev => prev.filter(l => !(l.habitId === habitId && l.date === date)));
-            } else if (result.id) {
-                // Check if it was an update or insert
-                setLogs(prev => {
-                    const exists = prev.some(l => l.habitId === habitId && l.date === date);
-                    if (exists) {
-                        return prev.map(l => (l.habitId === habitId && l.date === date) ? result : l);
-                    } else {
-                        return [...prev, result];
-                    }
-                });
+    // Toggles are sent one at a time so optimistic values (e.g. relapse counts) never race on the server
+    const toggleQueue = useRef<Promise<void>>(Promise.resolve());
+
+    const toggleHabitCompletion = (habitId: string, date: string, value: number = 1) => {
+        const previous = logs.find(l => l.habitId === habitId && l.date === date) ?? null;
+
+        // Optimistic update: the check responds instantly, rewards arrive with the server response
+        upsertLocalLog(habitId, date, value > 0
+            ? { ...(previous ?? { id: `temp-${habitId}-${date}`, habitId, date, timestamp: Date.now() }), value }
+            : null);
+
+        const run = async () => {
+            try {
+                const { game, ...result } = await api.logs.toggle(habitId, date, value);
+                applyGame(game);
+
+                if (result.deleted) {
+                    upsertLocalLog(habitId, date, null);
+                } else if (result.id) {
+                    upsertLocalLog(habitId, date, result);
+                }
+            } catch (err) {
+                console.error(err);
+                upsertLocalLog(habitId, date, previous);
+                setError('Failed to toggle completion');
             }
-        } catch (err) {
-            console.error(err);
-            setError('Failed to toggle completion');
-        }
+        };
+
+        toggleQueue.current = toggleQueue.current.then(run);
+        return toggleQueue.current;
     };
 
     const getHabitStats = (habitId: string): HabitStats => {

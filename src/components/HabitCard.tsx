@@ -8,6 +8,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import MonthCalendar from './CalendarView';
 import AddHabitModal from './AddHabitModal';
+import DeltaChips from './game/DeltaChips';
+import { useGame } from '../context/GameContext';
+import { MODES, comboMultiplier, resolveHabitValues } from '../game/rules';
 
 interface HabitCardProps {
     habit: Habit;
@@ -20,6 +23,7 @@ interface HabitCardProps {
 
 const HabitCard: React.FC<HabitCardProps> = ({ habit, onDragStart, onDragOver, onDrop, onDragEnd, isDragOver }) => {
     const { toggleHabitCompletion, getHabitStats, logs, deleteHabit } = useHabits();
+    const { player } = useGame();
     const navigate = useNavigate();
     const [isExpanded, setIsExpanded] = useState(false);
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -30,6 +34,10 @@ const HabitCard: React.FC<HabitCardProps> = ({ habit, onDragStart, onDragOver, o
     const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
 
     const stats = getHabitStats(habit.id);
+
+    // Expected reward before crits/drops, with the current combo and difficulty mode
+    const base = resolveHabitValues(habit);
+    const rewardMult = comboMultiplier(player?.combo ?? 0) * MODES[player?.mode ?? 'normal'].reward;
     const logForDate = logs.find(l => l.habitId === habit.id && l.date === selectedDateStr);
     const isCompletedForDate = logForDate ? (habit.metricType === 'boolean' ? logForDate.value === 1 : logForDate.value >= habit.targetValue) : false;
     // Use logForDate.value if exists, else 0
@@ -163,9 +171,16 @@ const HabitCard: React.FC<HabitCardProps> = ({ habit, onDragStart, onDragOver, o
                                 </button>
                             </div>
                         ) : (
-                            <p className="text-sm text-slate-500 capitalize flex items-center gap-2">
-                                {habit.frequency} • {habit.frequency === 'daily' ? `Goal: ${habit.targetValue} ${habit.unit || 'times'}` : `Goal: ${habit.goal}x / ${habit.frequency === 'weekly' ? 'week' : 'month'}`}
-                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm text-slate-500 capitalize flex items-center gap-2">
+                                    {habit.frequency} • {habit.frequency === 'daily' ? `Goal: ${habit.targetValue} ${habit.unit || 'times'}` : `Goal: ${habit.goal}x / ${habit.frequency === 'weekly' ? 'week' : 'month'}`}
+                                </p>
+                                <DeltaChips
+                                    xp={Math.round(base.xp * rewardMult)}
+                                    gold={Math.round(base.gold * rewardMult)}
+                                    className={cn(isCompletedForDate && "opacity-50")}
+                                />
+                            </div>
                         )}
                     </div>
 

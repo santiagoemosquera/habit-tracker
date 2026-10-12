@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { useHabits } from '../context/HabitContext';
 import HabitCard from './HabitCard';
+import BadHabitCard from './BadHabitCard';
+import { Skull } from 'lucide-react';
 import { Edit2, Check, X } from 'lucide-react';
+
+const BAD_SECTION = '__bad__';
 
 const HabitList: React.FC = () => {
     const { habits, renameCategory, reorderHabits } = useHabits();
@@ -10,7 +14,8 @@ const HabitList: React.FC = () => {
     const [draggedId, setDraggedId] = useState<string | null>(null);
     const [dragOverId, setDragOverId] = useState<string | null>(null);
 
-    const activeHabits = habits.filter(h => !h.archived);
+    const activeHabits = habits.filter(h => !h.archived && h.kind !== 'bad');
+    const badHabits = habits.filter(h => !h.archived && h.kind === 'bad').sort((a, b) => a.order - b.order);
 
     // Grouping
     const groupedHabits = activeHabits.reduce((acc, habit) => {
@@ -34,7 +39,7 @@ const HabitList: React.FC = () => {
             return;
         }
 
-        const categoryHabits = groupedHabits[category];
+        const categoryHabits = category === BAD_SECTION ? badHabits : groupedHabits[category];
         const ids = categoryHabits.map(h => h.id);
         const fromIndex = ids.indexOf(draggedId);
         const toIndex = ids.indexOf(targetId);
@@ -152,6 +157,46 @@ const HabitList: React.FC = () => {
                     </div>
                 </div>
             ))}
+
+            {badHabits.length > 0 && (
+                <div>
+                    <div className="flex items-center gap-2 mb-4 px-1">
+                        <h3 className="text-xl font-bold text-rose-600 dark:text-rose-400 flex items-center gap-2">
+                            <Skull size={20} /> Malos hábitos
+                            <span className="text-xs font-normal text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                                {badHabits.length}
+                            </span>
+                        </h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {badHabits.map(habit => (
+                            <BadHabitCard
+                                key={habit.id}
+                                habit={habit}
+                                isDragOver={dragOverId === habit.id}
+                                onDragStart={(e) => {
+                                    e.dataTransfer.effectAllowed = 'move';
+                                    setDraggedId(habit.id);
+                                }}
+                                onDragOver={(e) => {
+                                    e.preventDefault();
+                                    if (draggedId && draggedId !== habit.id) {
+                                        setDragOverId(habit.id);
+                                    }
+                                }}
+                                onDrop={(e) => {
+                                    e.preventDefault();
+                                    handleDrop(BAD_SECTION, habit.id);
+                                }}
+                                onDragEnd={() => {
+                                    setDraggedId(null);
+                                    setDragOverId(null);
+                                }}
+                            />
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

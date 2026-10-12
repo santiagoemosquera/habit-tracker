@@ -1,3 +1,5 @@
+import type { Attribute, HabitKind } from './game';
+
 export type Frequency = 'daily' | 'weekly' | 'monthly';
 
 export type MetricType = 'boolean' | 'numeric' | 'custom';
@@ -17,6 +19,13 @@ export interface Habit {
     color?: string;
     icon?: string;
     category?: string; // e.g. "Health", "Mind", "Work"
+    kind?: HabitKind; // 'good' (default) or 'bad'
+    difficulty?: string; // good: trivial|easy|medium|hard, bad: light|medium|severe
+    attribute?: Attribute | null; // null = inferred from category
+    customXp?: number | null;
+    customGold?: number | null;
+    customHp?: number | null;
+    createdAt?: string;
 }
 
 export interface HabitLog {

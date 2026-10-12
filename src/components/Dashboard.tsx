@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useHabits } from '../context/HabitContext';
-import { Plus, Flame } from 'lucide-react';
+import { Plus, Flame, Skull } from 'lucide-react';
 import HabitList from './HabitList';
 import AddHabitModal from './AddHabitModal';
 import { HabitStats } from '../types';
@@ -8,6 +8,7 @@ import { HabitStats } from '../types';
 const Dashboard: React.FC = () => {
     const { habits } = useHabits();
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isBadModalOpen, setIsBadModalOpen] = useState(false);
 
     // Calculate global stats (simple version)
     const activeHabits = habits.filter(h => !h.archived).length;
@@ -21,13 +22,22 @@ const Dashboard: React.FC = () => {
                     <p className="text-slate-500 mt-1">{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</p>
                 </div>
 
-                <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-lg font-medium transition-all active:scale-95 shadow-lg shadow-indigo-500/20"
-                >
-                    <Plus size={20} />
-                    New Habit
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setIsModalOpen(true)}
+                        className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-lg font-medium transition-all active:scale-95 shadow-lg shadow-indigo-500/20"
+                    >
+                        <Plus size={20} />
+                        New Habit
+                    </button>
+                    <button
+                        onClick={() => setIsBadModalOpen(true)}
+                        className="flex items-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-500/10 dark:hover:bg-rose-500/20 px-4 py-2.5 rounded-lg font-medium transition-all active:scale-95"
+                    >
+                        <Skull size={18} />
+                        Mal hábito
+                    </button>
+                </div>
             </div>
 
 
@@ -53,6 +63,7 @@ const Dashboard: React.FC = () => {
 
             {/* Modal */}
             {isModalOpen && <AddHabitModal onClose={() => setIsModalOpen(false)} />}
+            {isBadModalOpen && <AddHabitModal onClose={() => setIsBadModalOpen(false)} initialKind="bad" />}
         </div>
     );
 };
