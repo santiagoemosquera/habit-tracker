@@ -85,6 +85,7 @@ export interface JudgmentDay {
     perfect: boolean;
     death: boolean;
     overdue: number;
+    minimums: number;
 }
 
 export interface Reward {

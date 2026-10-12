@@ -25,6 +25,7 @@ export interface Habit {
     customXp?: number | null;
     customGold?: number | null;
     customHp?: number | null;
+    minValue?: number | null; // numeric habits: minimum viable value (keeps streak, no reward)
     activeDays?: string | null; // daily habits: "1,2,3,4,5" = weekdays only; null = every day
     createdAt?: string;
 }

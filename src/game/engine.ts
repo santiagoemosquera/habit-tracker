@@ -6,7 +6,7 @@ import { and, eq, sql, desc, gte, lte, inArray, isNotNull } from 'drizzle-orm';
 import { addDays, format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from 'date-fns';
 import {
     ATTRIBUTE_KEYS, MODES, PERFECT_DAY, CLEAN_DAY_XP, MAX_JUDGED_DAYS, COMBO_THRESHOLD, SHOP_ITEMS,
-    levelFromXp, titleForLevel, maxHp, comboMultiplier, xpToNext, attributeForHabit, isBadHabit, isLogCompleted, isActiveOn,
+    levelFromXp, titleForLevel, maxHp, comboMultiplier, xpToNext, attributeForHabit, isBadHabit, isLogCompleted, isLogSatisfied, logTier, isActiveOn,
     computeHabitReward, computeHabitGoalBonus, computeBadHabitPenalty, computeMissedDailyDamage,
     computeQuestReward, computeQuestStepXp, computeQuestOverduePenalty,
 } from './rules.js';
@@ -166,20 +166,42 @@ class Game {
 
     // --- Habits ---
 
-    async awardHabit(habit: HabitRow, date: string) {
-        const r = computeHabitReward(habit, date, this.p.combo, this.mode);
+    /** Keeps the habit's reward event in line with the logged value and emits only the difference. */
+    async syncHabitReward(habit: HabitRow, date: string, prev: number, next: number) {
+        const where = and(eq(gameEvents.type, 'habit'), eq(gameEvents.sourceId, habit.id), eq(gameEvents.date, date));
+        const [existing] = await db.select().from(gameEvents).where(where);
+        // Keep the combo the reward was first earned with, so editing the value doesn't re-price it
+        const combo = (existing?.meta as { combo?: number } | null)?.combo ?? this.p.combo;
+        const r = computeHabitReward(habit, date, combo, this.mode, next);
         const attribute = attributeForHabit(habit);
-        const ev = await this.insert({
-            type: 'habit', sourceId: habit.id, date, xp: r.xp, gold: r.gold, attribute,
-            label: habit.name, meta: { crit: r.crit, drop: r.drop, combo: this.p.combo },
-        });
-        if (ev) {
-            this.deltas.push({ label: habit.name, xp: r.xp, gold: r.gold, hp: 0, attribute, crit: r.crit, drop: r.drop, tone: 'reward' });
-        }
-    }
+        const oldXp = existing?.xp ?? 0;
+        const oldGold = existing?.gold ?? 0;
 
-    async revokeHabit(habit: HabitRow, date: string) {
-        await this.revoke(and(eq(gameEvents.type, 'habit'), eq(gameEvents.sourceId, habit.id), eq(gameEvents.date, date)));
+        if (logTier(habit, next) === 'minimum' && logTier(habit, prev) !== 'minimum') {
+            this.deltas.push({ label: `🟡 Mínimo viable: ${habit.name} (racha salvada)`, xp: 0, gold: 0, hp: 0, tone: 'info' });
+        }
+        if (r.xp === oldXp && r.gold === oldGold) return;
+
+        if (existing) await db.delete(gameEvents).where(where);
+        if (r.xp > 0 || r.gold > 0) {
+            await this.insert({
+                type: 'habit', sourceId: habit.id, date, xp: r.xp, gold: r.gold, attribute, label: habit.name,
+                meta: { crit: r.crit, drop: r.drop, combo, bonusXp: r.bonusXp, bonusGold: r.bonusGold, value: next },
+            });
+        }
+
+        const dXp = r.xp - oldXp;
+        const dGold = r.gold - oldGold;
+        const firstAward = !existing;
+        const label = firstAward
+            ? (r.bonusXp > 0 ? `${habit.name} (+extra)` : habit.name)
+            : r.xp === 0 ? `Deshecho: ${habit.name}`
+                : dXp > 0 ? `🔥 Extra: ${habit.name}` : `Menos extra: ${habit.name}`;
+        this.deltas.push({
+            label, xp: dXp, gold: dGold, hp: 0, attribute,
+            crit: firstAward && r.crit, drop: firstAward ? r.drop : 0,
+            tone: dXp > 0 || dGold > 0 ? 'reward' : 'revert',
+        });
     }
 
     async syncHabitGoal(habit: HabitRow, date: string) {
@@ -270,10 +292,8 @@ export async function onHabitLogChanged(habitId: string, date: string, prev: num
     if (isBadHabit(habit)) {
         await g.recordSlips(habit, date, prev, next);
     } else {
-        const was = isLogCompleted(habit, prev);
-        const is = isLogCompleted(habit, next);
         await Promise.all([
-            !was && is ? g.awardHabit(habit, date) : was && !is ? g.revokeHabit(habit, date) : null,
+            g.syncHabitReward(habit, date, prev, next),
             habit.frequency === 'daily' ? g.syncPerfectDay(date) : g.syncHabitGoal(habit, date),
         ]);
     }
@@ -425,14 +445,18 @@ export async function judgeDays(today: string): Promise<{ report: JudgmentDay[];
         const dailies = existing.filter(h => !isBadHabit(h) && h.frequency === 'daily' && isActiveOn(h, date));
         const bads = existing.filter(h => isBadHabit(h));
         const dayLogs = logs.filter(l => l.date === date);
-        const doneFor = (h: HabitRow) => dayLogs.some(l => l.habitId === h.id && isLogCompleted(h, l.value));
+        // Minimum viable protects HP and combo; the Perfect Day needs every target
+        const valueFor = (h: HabitRow) => dayLogs.find(l => l.habitId === h.id)?.value ?? 0;
+        const satisfied = (h: HabitRow) => isLogSatisfied(h, valueFor(h));
+        const full = (h: HabitRow) => isLogCompleted(h, valueFor(h));
 
-        const completed = dailies.filter(doneFor).length;
-        const missed = dailies.filter(h => !doneFor(h));
+        const completed = dailies.filter(satisfied).length;
+        const minimums = dailies.filter(h => satisfied(h) && !full(h)).length;
+        const missed = dailies.filter(h => !satisfied(h));
         const damage = m.missedDaily > 0 ? missed.reduce((acc, h) => acc + computeMissedDailyDamage(h, mode), 0) : 0;
         const cleanDays = bads.filter(h => !dayLogs.some(l => l.habitId === h.id && l.value > 0)).length;
         const cleanXp = cleanDays * Math.round(CLEAN_DAY_XP * m.reward);
-        const perfect = dailies.length > 0 && completed === dailies.length;
+        const perfect = dailies.length > 0 && dailies.every(full);
         const regen = perfect ? PERFECT_DAY.regen : 0;
 
         let comboBroken = false;
@@ -447,7 +471,7 @@ export async function judgeDays(today: string): Promise<{ report: JudgmentDay[];
 
         const day: JudgmentDay = {
             date, completed, total: dailies.length, damage, regen, cleanDays, cleanXp,
-            comboAfter: combo, comboBroken, shieldUsed, perfect, death: false, overdue: 0,
+            comboAfter: combo, comboBroken, shieldUsed, perfect, death: false, overdue: 0, minimums,
         };
 
         // The unique (type, date) index makes judging idempotent across concurrent calls.

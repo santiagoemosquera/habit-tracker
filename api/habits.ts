@@ -10,7 +10,7 @@ export default async function handler(req: any, res: any) {
         }
 
         if (req.method === 'POST') {
-            const { name, category, frequency, goal, metricType, targetValue, unit, kind, difficulty, attribute, customXp, customGold, customHp, activeDays } = req.body;
+            const { name, category, frequency, goal, metricType, targetValue, unit, kind, difficulty, attribute, customXp, customGold, customHp, activeDays, minValue } = req.body;
             const newHabit = await db.insert(habits).values({
                 name,
                 category: category || 'General',
@@ -26,6 +26,7 @@ export default async function handler(req: any, res: any) {
                 customGold: customGold ?? null,
                 customHp: customHp ?? null,
                 activeDays: activeDays || null,
+                minValue: minValue || null,
             }).returning();
             return res.status(201).json(newHabit[0]);
         }

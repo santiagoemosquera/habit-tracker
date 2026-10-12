@@ -82,6 +82,9 @@ export const QUEST_STEP_XP = 5;
 export const QUEST_EARLY_BONUS = 0.25;
 export const QUEST_OVERDUE_PCT = 0.1;
 export const COMBO_THRESHOLD = 0.8;
+// Going past a numeric target: +50% of the base reward per extra "target" done, up to +200% (x3 total)
+export const OVERACHIEVE_RATE = 0.5;
+export const OVERACHIEVE_CAP = 2;
 export const MAX_JUDGED_DAYS = 30;
 
 export const SHOP_ITEMS = {
@@ -139,6 +142,7 @@ export interface GameHabit {
     targetValue: number;
     goal: number;
     activeDays?: string | null;
+    minValue?: number | null;
 }
 
 export function attributeForCategory(category?: string | null): Attribute {
@@ -203,10 +207,39 @@ export function resolveHabitValues(habit: GameHabit) {
     };
 }
 
-/** Whether a single log value counts as "done" for that day. */
+/** Whether a single log value reaches the target (earns the reward). */
 export function isLogCompleted(habit: Pick<GameHabit, 'metricType' | 'targetValue'>, value: number) {
     if (habit.metricType === 'boolean') return value >= 1;
     return value >= (habit.targetValue || 1);
+}
+
+export type LogTier = 'none' | 'partial' | 'minimum' | 'full';
+
+/** Minimum viable value of a numeric habit, if it has a valid one (below the target). */
+export function minimumOf(habit: Pick<GameHabit, 'metricType' | 'targetValue' | 'minValue'>) {
+    if (habit.metricType === 'boolean' || !habit.minValue || habit.minValue <= 0) return null;
+    return habit.minValue < (habit.targetValue || 1) ? habit.minValue : null;
+}
+
+export function logTier(habit: Pick<GameHabit, 'metricType' | 'targetValue' | 'minValue'>, value: number): LogTier {
+    if (value <= 0) return 'none';
+    if (isLogCompleted(habit, value)) return 'full';
+    const min = minimumOf(habit);
+    return min !== null && value >= min ? 'minimum' : 'partial';
+}
+
+/** Minimum viable or better: no damage and the streak/combo holds, even without reward. */
+export const isLogSatisfied = (habit: Pick<GameHabit, 'metricType' | 'targetValue' | 'minValue'>, value: number) => {
+    const tier = logTier(habit, value);
+    return tier === 'full' || tier === 'minimum';
+};
+
+/** Extra share of the base reward for going past the target (0..OVERACHIEVE_CAP). */
+export function overachieveRatio(habit: Pick<GameHabit, 'metricType' | 'targetValue'>, value: number) {
+    if (habit.metricType === 'boolean') return 0;
+    const target = habit.targetValue || 1;
+    const extra = value - target;
+    return extra > 0 ? Math.min(OVERACHIEVE_CAP, OVERACHIEVE_RATE * (extra / target)) : 0;
 }
 
 // Deterministic RNG so re-toggling a habit can't re-roll crits.
@@ -225,7 +258,9 @@ export function seededRandom(seed: string) {
     };
 }
 
-export function computeHabitReward(habit: GameHabit, date: string, combo: number, mode: DifficultyMode) {
+/** Reward for a logged value: nothing below the target, base (+crit/drop) at it, plus a bonus past it. */
+export function computeHabitReward(habit: GameHabit, date: string, combo: number, mode: DifficultyMode, value = habit.targetValue || 1) {
+    if (!isLogCompleted(habit, value)) return { xp: 0, gold: 0, crit: false, drop: 0, bonusXp: 0, bonusGold: 0 };
     const base = resolveHabitValues(habit);
     const mult = comboMultiplier(combo) * MODES[mode].reward;
     const rng = seededRandom(`${habit.id}:${date}`);
@@ -233,7 +268,22 @@ export function computeHabitReward(habit: GameHabit, date: string, combo: number
     const dropRoll = rng() < DROP_CHANCE;
     const drop = dropRoll ? DROP_MIN + Math.floor(rng() * (DROP_MAX - DROP_MIN + 1)) : 0;
     const gold = Math.round(base.gold * mult) * (crit ? 2 : 1);
-    return { xp: Math.round(base.xp * mult), gold: gold + drop, crit, drop };
+    const ratio = overachieveRatio(habit, value);
+    const bonusXp = Math.round(base.xp * mult * ratio);
+    const bonusGold = Math.round(base.gold * mult * ratio);
+    return { xp: Math.round(base.xp * mult) + bonusXp, gold: gold + drop + bonusGold, crit, drop, bonusXp, bonusGold };
+}
+
+/** Reward a value is worth without luck (no crit/drop): used for previews on the cards. */
+export function expectedHabitReward(habit: GameHabit, combo: number, mode: DifficultyMode, value: number) {
+    if (!isLogCompleted(habit, value)) return { xp: 0, gold: 0 };
+    const base = resolveHabitValues(habit);
+    const mult = comboMultiplier(combo) * MODES[mode].reward;
+    const ratio = overachieveRatio(habit, value);
+    return {
+        xp: Math.round(base.xp * mult) + Math.round(base.xp * mult * ratio),
+        gold: Math.round(base.gold * mult) + Math.round(base.gold * mult * ratio),
+    };
 }
 
 export function computeHabitGoalBonus(habit: GameHabit, mode: DifficultyMode) {

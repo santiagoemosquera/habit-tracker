@@ -1,7 +1,7 @@
 import { Habit, HabitLog } from '../types';
 import { differenceInDays, differenceInCalendarWeeks, differenceInCalendarMonths, parseISO, startOfDay, isSameDay, isSameWeek, isSameMonth, subDays, subWeeks, subMonths, format } from 'date-fns';
 import { parseLocalDate } from './dateHelpers';
-import { isActiveOn } from '../game/rules';
+import { isActiveOn, isLogSatisfied } from '../game/rules';
 
 export function calculateStreak(habit: Habit, logs: HabitLog[]): number {
     if (!logs || logs.length === 0) return 0;
@@ -23,8 +23,8 @@ export function calculateStreak(habit: Habit, logs: HabitLog[]): number {
             const log = habitLogs.find(l => isSameDay(parseLocalDate(l.date), date));
             if (!log) return false;
 
-            if (habit.metricType === 'boolean') return log.value === 1;
-            return log.value >= (habit.targetValue || 1);
+            // Minimum viable keeps the streak alive
+            return isLogSatisfied(habit, log.value);
         }
         else if (habit.frequency === 'weekly') {
             // Find all logs for this week

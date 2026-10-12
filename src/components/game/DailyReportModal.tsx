@@ -44,6 +44,7 @@ const DailyReportModal: React.FC = () => {
                             <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-400">
                                 {d.damage > 0 && <span className="text-rose-600 dark:text-rose-400">−{d.damage} ❤️ por dailies incumplidas</span>}
                                 {d.regen > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{d.regen} ❤️ Día Perfecto</span>}
+                                {d.minimums > 0 && <span className="text-amber-600 dark:text-amber-400">🟡 {d.minimums} en mínimo viable</span>}
                                 {d.cleanDays > 0 && (
                                     <span className="text-violet-600 dark:text-violet-400">
                                         🧘 {d.cleanDays} {d.cleanDays > 1 ? 'malos hábitos evitados' : 'mal hábito evitado'} (+{d.cleanXp} XP)

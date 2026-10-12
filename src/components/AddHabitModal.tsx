@@ -27,6 +27,7 @@ const AddHabitModal: React.FC<AddHabitModalProps> = ({ onClose, initialHabit, in
     const [goal, setGoal] = useState<number>(initialHabit?.goal || 1);
     const [targetValue, setTargetValue] = useState<number>(initialHabit?.targetValue || 1);
     const [unit, setUnit] = useState(initialHabit?.unit || '');
+    const [minValue, setMinValue] = useState(initialHabit?.minValue?.toString() ?? '');
     const [category, setCategory] = useState(initialHabit?.category || '');
 
     // Game settings
@@ -73,6 +74,10 @@ const AddHabitModal: React.FC<AddHabitModalProps> = ({ onClose, initialHabit, in
         customXp: isBad ? null : parseCustom(customXp), customGold: parseCustom(customGold), customHp: parseCustom(customHp),
     });
     const presetValues = presets[difficulty];
+    const parsedMin = (() => {
+        const n = parseInt(minValue);
+        return isNaN(n) || n <= 0 || n >= targetValue ? null : n;
+    })();
     const autoAttribute = ATTRIBUTES[attributeForCategory(category)];
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -94,6 +99,7 @@ const AddHabitModal: React.FC<AddHabitModalProps> = ({ onClose, initialHabit, in
             customGold: parseCustom(customGold),
             customHp: parseCustom(customHp),
             activeDays: !isBad && frequency === 'daily' ? activeDaysStr : null,
+            minValue: !isBad && metricType === 'numeric' && parsedMin !== null ? parsedMin : null,
             category: category.trim() || undefined,
             // Keep original start date if editing, else new
             startDate: initialHabit?.startDate || new Date().toISOString()
@@ -285,6 +291,27 @@ const AddHabitModal: React.FC<AddHabitModalProps> = ({ onClose, initialHabit, in
                                             />
                                         </div>
                                     </div>
+                                    <label className="block text-sm font-medium text-slate-600 mt-4 mb-2">
+                                        Mínimo viable <span className="text-slate-400 font-normal">(opcional)</span>
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={minValue}
+                                        onChange={e => setMinValue(e.target.value)}
+                                        className="w-32 px-3 py-2 rounded-lg border border-slate-200"
+                                        placeholder={`ej. ${Math.max(1, Math.round(targetValue / 3))}`}
+                                    />
+                                    {minValue !== '' && parsedMin === null && (
+                                        <p className="mt-1 text-xs text-red-500">Tiene que ser menor que el objetivo ({targetValue}).</p>
+                                    )}
+                                    <ul className="mt-2 text-xs text-slate-500 space-y-0.5">
+                                        {parsedMin !== null && (
+                                            <li>🟡 Desde {parsedMin} {unit}: no perdés vida ni racha (sin recompensa)</li>
+                                        )}
+                                        <li>✅ Desde {targetValue} {unit}: recompensa completa</li>
+                                        <li>🔥 Más de {targetValue} {unit}: +50% por cada {targetValue} extra (hasta ×3)</li>
+                                    </ul>
                                 </div>
                             )}
                         </div>

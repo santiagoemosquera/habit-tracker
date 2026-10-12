@@ -19,6 +19,7 @@ export const habits = pgTable("habits", {
     customXp: integer("custom_xp"),
     customGold: integer("custom_gold"),
     customHp: integer("custom_hp"),
+    minValue: integer("min_value"), // numeric habits: "minimum viable" value that keeps the streak (no reward)
     activeDays: text("active_days"), // daily habits: comma-separated weekdays (0=Sun..6=Sat); null = every day
     archived: boolean("archived").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),

@@ -10,7 +10,7 @@ import MonthCalendar from './CalendarView';
 import AddHabitModal from './AddHabitModal';
 import DeltaChips from './game/DeltaChips';
 import { useGame } from '../context/GameContext';
-import { MODES, comboMultiplier, describeActiveDays, isActiveOn, resolveHabitValues } from '../game/rules';
+import { describeActiveDays, expectedHabitReward, isActiveOn, logTier, minimumOf } from '../game/rules';
 
 interface HabitCardProps {
     habit: Habit;
@@ -35,14 +35,21 @@ const HabitCard: React.FC<HabitCardProps> = ({ habit, onDragStart, onDragOver, o
 
     const stats = getHabitStats(habit.id);
 
-    // Expected reward before crits/drops, with the current combo and difficulty mode
-    const base = resolveHabitValues(habit);
     const isRestDay = habit.frequency === 'daily' && !isActiveOn(habit, selectedDateStr);
-    const rewardMult = comboMultiplier(player?.combo ?? 0) * MODES[player?.mode ?? 'normal'].reward;
     const logForDate = logs.find(l => l.habitId === habit.id && l.date === selectedDateStr);
     const isCompletedForDate = logForDate ? (habit.metricType === 'boolean' ? logForDate.value === 1 : logForDate.value >= habit.targetValue) : false;
     // Use logForDate.value if exists, else 0
     const displayedVal = logForDate ? logForDate.value : 0;
+    const tier = logTier(habit, displayedVal);
+    const minimum = minimumOf(habit);
+
+    // Reward shown on the card: what the current value is worth, or the target reward if not reached yet
+    const shownReward = expectedHabitReward(
+        habit, player?.combo ?? 0, player?.mode ?? 'normal',
+        Math.max(displayedVal, habit.metricType === 'boolean' ? 1 : habit.targetValue || 1),
+    );
+    const extraPct = habit.metricType !== 'boolean' && displayedVal > habit.targetValue
+        ? Math.round(((displayedVal - habit.targetValue) / habit.targetValue) * 100) : 0;
 
     const handleToggle = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -180,9 +187,9 @@ const HabitCard: React.FC<HabitCardProps> = ({ habit, onDragStart, onDragOver, o
                                     <span className="text-[11px] font-bold text-slate-500 bg-slate-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-md">Día libre</span>
                                 )}
                                 <DeltaChips
-                                    xp={Math.round(base.xp * rewardMult)}
-                                    gold={Math.round(base.gold * rewardMult)}
-                                    className={cn(isCompletedForDate && "opacity-50")}
+                                    xp={shownReward.xp}
+                                    gold={shownReward.gold}
+                                    className={cn(isCompletedForDate && extraPct === 0 && "opacity-50")}
                                 />
                             </div>
                         )}
@@ -232,12 +239,29 @@ const HabitCard: React.FC<HabitCardProps> = ({ habit, onDragStart, onDragOver, o
                         </div>
 
                         <div className="mt-2 flex items-center gap-2">
-                            <div className="h-1.5 flex-1 bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                            <div className="relative h-1.5 flex-1 bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden">
                                 <div
-                                    className={cn("h-full rounded-full transition-all duration-500", isCompletedForDate ? "bg-green-500" : "bg-indigo-500")}
+                                    className={cn(
+                                        "h-full rounded-full transition-all duration-500",
+                                        extraPct > 0 ? "bg-gradient-to-r from-green-500 to-orange-400"
+                                            : tier === 'full' ? "bg-green-500" : tier === 'minimum' ? "bg-amber-400" : "bg-indigo-500"
+                                    )}
                                     style={{ width: `${Math.min(100, (displayedVal / habit.targetValue) * 100)}%` }}
                                 />
+                                {minimum !== null && (
+                                    <div
+                                        className="absolute top-0 h-full w-0.5 bg-amber-500/70"
+                                        style={{ left: `${(minimum / habit.targetValue) * 100}%` }}
+                                        title={`Mínimo viable: ${minimum} ${habit.unit ?? ''}`}
+                                    />
+                                )}
                             </div>
+                            {tier === 'minimum' && (
+                                <span className="text-[11px] font-bold text-amber-600 whitespace-nowrap" title="No perdés vida ni racha">🟡 Mínimo</span>
+                            )}
+                            {extraPct > 0 && (
+                                <span className="text-[11px] font-bold text-orange-500 whitespace-nowrap">🔥 +{extraPct}%</span>
+                            )}
                             {displayedVal > 0 && (
                                 <button
                                     onClick={(e) => {
