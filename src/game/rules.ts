@@ -138,6 +138,7 @@ export interface GameHabit {
     metricType: string;
     targetValue: number;
     goal: number;
+    activeDays?: string | null;
 }
 
 export function attributeForCategory(category?: string | null): Attribute {
@@ -154,6 +155,39 @@ export function attributeForHabit(habit: Pick<GameHabit, 'attribute' | 'category
 }
 
 export const isBadHabit = (habit: Pick<GameHabit, 'kind'>) => habit.kind === 'bad';
+
+export const WEEKDAYS = [
+    { day: 1, short: 'L', label: 'Lun' },
+    { day: 2, short: 'M', label: 'Mar' },
+    { day: 3, short: 'X', label: 'Mié' },
+    { day: 4, short: 'J', label: 'Jue' },
+    { day: 5, short: 'V', label: 'Vie' },
+    { day: 6, short: 'S', label: 'Sáb' },
+    { day: 0, short: 'D', label: 'Dom' },
+];
+export const WORKDAYS = '1,2,3,4,5';
+
+/** Weekdays (0=Sun..6=Sat) a daily habit is due on; null = every day. */
+export function parseActiveDays(activeDays?: string | null): number[] | null {
+    if (!activeDays) return null;
+    const days = activeDays.split(',').map(Number).filter(n => n >= 0 && n <= 6);
+    return days.length === 0 || days.length === 7 ? null : days;
+}
+
+export function describeActiveDays(activeDays?: string | null) {
+    const days = parseActiveDays(activeDays);
+    if (!days) return 'Todos los días';
+    if ([...days].sort().join(',') === WORKDAYS) return 'Lun–Vie';
+    return WEEKDAYS.filter(w => days.includes(w.day)).map(w => w.label).join(', ');
+}
+
+/** Whether a daily habit is due on a YYYY-MM-DD date (rest days don't count as misses). */
+export function isActiveOn(habit: Pick<GameHabit, 'activeDays'>, date: string) {
+    const days = parseActiveDays(habit.activeDays);
+    if (!days) return true;
+    const [y, m, d] = date.split('-').map(Number);
+    return days.includes(new Date(y, m - 1, d).getDay());
+}
 
 /** Base values for a habit: its custom overrides, or the preset of its difficulty. */
 export function resolveHabitValues(habit: GameHabit) {

@@ -6,7 +6,7 @@ import { and, eq, sql, desc, gte, lte, inArray, isNotNull } from 'drizzle-orm';
 import { addDays, format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from 'date-fns';
 import {
     ATTRIBUTE_KEYS, MODES, PERFECT_DAY, CLEAN_DAY_XP, MAX_JUDGED_DAYS, COMBO_THRESHOLD, SHOP_ITEMS,
-    levelFromXp, titleForLevel, maxHp, comboMultiplier, xpToNext, attributeForHabit, isBadHabit, isLogCompleted,
+    levelFromXp, titleForLevel, maxHp, comboMultiplier, xpToNext, attributeForHabit, isBadHabit, isLogCompleted, isActiveOn,
     computeHabitReward, computeHabitGoalBonus, computeBadHabitPenalty, computeMissedDailyDamage,
     computeQuestReward, computeQuestStepXp, computeQuestOverduePenalty,
 } from './rules.js';
@@ -220,7 +220,7 @@ class Game {
             db.select().from(habitLogs).where(eq(habitLogs.date, date)),
             db.select().from(gameEvents).where(where),
         ]);
-        const dailies = allDailies.filter(h => createdDay(h) <= date);
+        const dailies = allDailies.filter(h => createdDay(h) <= date && isActiveOn(h, date));
         const allDone = dailies.length > 0 && dailies.every(h =>
             logs.some(l => l.habitId === h.id && isLogCompleted(h, l.value)));
 
@@ -422,7 +422,7 @@ export async function judgeDays(today: string): Promise<{ report: JudgmentDay[];
     for (let d = start; fmtDay(d) <= yesterday; d = addDays(d, 1)) {
         const date = fmtDay(d);
         const existing = allHabits.filter(h => createdDay(h) <= date);
-        const dailies = existing.filter(h => !isBadHabit(h) && h.frequency === 'daily');
+        const dailies = existing.filter(h => !isBadHabit(h) && h.frequency === 'daily' && isActiveOn(h, date));
         const bads = existing.filter(h => isBadHabit(h));
         const dayLogs = logs.filter(l => l.date === date);
         const doneFor = (h: HabitRow) => dayLogs.some(l => l.habitId === h.id && isLogCompleted(h, l.value));

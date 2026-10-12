@@ -4,7 +4,9 @@ import { Frequency, MetricType } from '../types';
 import { X, Check, Swords, Skull, SlidersHorizontal } from 'lucide-react';
 import { cn } from '../utils/cn';
 import type { Attribute, HabitKind } from '../types/game';
-import { ATTRIBUTES, ATTRIBUTE_KEYS, BAD_PRESETS, GOOD_PRESETS, attributeForCategory, resolveHabitValues } from '../game/rules';
+import {
+    ATTRIBUTES, ATTRIBUTE_KEYS, BAD_PRESETS, GOOD_PRESETS, WEEKDAYS, WORKDAYS, attributeForCategory, parseActiveDays, resolveHabitValues,
+} from '../game/rules';
 
 import { Habit } from '../types';
 
@@ -39,6 +41,16 @@ const AddHabitModal: React.FC<AddHabitModalProps> = ({ onClose, initialHabit, in
     const [customXp, setCustomXp] = useState(initialHabit?.customXp?.toString() ?? '');
     const [customGold, setCustomGold] = useState(initialHabit?.customGold?.toString() ?? '');
     const [customHp, setCustomHp] = useState(initialHabit?.customHp?.toString() ?? '');
+
+    const [activeDays, setActiveDays] = useState<number[] | null>(parseActiveDays(initialHabit?.activeDays));
+
+    const toggleDay = (day: number) => {
+        const current = activeDays ?? WEEKDAYS.map(w => w.day);
+        const next = current.includes(day) ? current.filter(d => d !== day) : [...current, day];
+        if (next.length === 0) return;
+        setActiveDays(next.length === 7 ? null : next);
+    };
+    const activeDaysStr = activeDays ? [...activeDays].sort().join(',') : null;
 
     const isBad = kind === 'bad';
     const presets: Record<string, { label: string; xp?: number; gold: number; hp: number; hint: string }> =
@@ -81,6 +93,7 @@ const AddHabitModal: React.FC<AddHabitModalProps> = ({ onClose, initialHabit, in
             customXp: isBad ? null : parseCustom(customXp),
             customGold: parseCustom(customGold),
             customHp: parseCustom(customHp),
+            activeDays: !isBad && frequency === 'daily' ? activeDaysStr : null,
             category: category.trim() || undefined,
             // Keep original start date if editing, else new
             startDate: initialHabit?.startDate || new Date().toISOString()
@@ -194,6 +207,38 @@ const AddHabitModal: React.FC<AddHabitModalProps> = ({ onClose, initialHabit, in
                             </select>
                         </div>
                     </div>
+
+                    {/* Active days (daily habits) */}
+                    {frequency === 'daily' && (
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="text-sm font-bold text-slate-700">¿Qué días?</label>
+                                <div className="flex gap-1 text-xs font-bold">
+                                    <button type="button" onClick={() => setActiveDays(null)}
+                                        className={cn("px-2 py-1 rounded-md", activeDaysStr === null ? "bg-indigo-50 text-indigo-700" : "text-slate-400 hover:text-slate-600")}>
+                                        Todos
+                                    </button>
+                                    <button type="button" onClick={() => setActiveDays(WORKDAYS.split(',').map(Number))}
+                                        className={cn("px-2 py-1 rounded-md", activeDaysStr === WORKDAYS ? "bg-indigo-50 text-indigo-700" : "text-slate-400 hover:text-slate-600")}>
+                                        Lun–Vie
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="flex gap-1.5">
+                                {WEEKDAYS.map(w => {
+                                    const on = !activeDays || activeDays.includes(w.day);
+                                    return (
+                                        <button key={w.day} type="button" onClick={() => toggleDay(w.day)} title={w.label}
+                                            className={cn("flex-1 py-2 rounded-lg text-sm font-bold transition-all",
+                                                on ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-400 hover:bg-slate-200")}>
+                                            {w.short}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            {activeDays && <p className="mt-1.5 text-xs text-slate-400">Los días libres no cuentan como incumplidos ni cortan la racha.</p>}
+                        </div>
+                    )}
 
                     {/* Conditional Fields */}
                     {(frequency !== 'daily' || metricType === 'numeric') && (

@@ -10,7 +10,7 @@ import MonthCalendar from './CalendarView';
 import AddHabitModal from './AddHabitModal';
 import DeltaChips from './game/DeltaChips';
 import { useGame } from '../context/GameContext';
-import { MODES, comboMultiplier, resolveHabitValues } from '../game/rules';
+import { MODES, comboMultiplier, describeActiveDays, isActiveOn, resolveHabitValues } from '../game/rules';
 
 interface HabitCardProps {
     habit: Habit;
@@ -37,6 +37,7 @@ const HabitCard: React.FC<HabitCardProps> = ({ habit, onDragStart, onDragOver, o
 
     // Expected reward before crits/drops, with the current combo and difficulty mode
     const base = resolveHabitValues(habit);
+    const isRestDay = habit.frequency === 'daily' && !isActiveOn(habit, selectedDateStr);
     const rewardMult = comboMultiplier(player?.combo ?? 0) * MODES[player?.mode ?? 'normal'].reward;
     const logForDate = logs.find(l => l.habitId === habit.id && l.date === selectedDateStr);
     const isCompletedForDate = logForDate ? (habit.metricType === 'boolean' ? logForDate.value === 1 : logForDate.value >= habit.targetValue) : false;
@@ -173,8 +174,11 @@ const HabitCard: React.FC<HabitCardProps> = ({ habit, onDragStart, onDragOver, o
                         ) : (
                             <div className="flex flex-wrap items-center gap-2">
                                 <p className="text-sm text-slate-500 capitalize flex items-center gap-2">
-                                    {habit.frequency} • {habit.frequency === 'daily' ? `Goal: ${habit.targetValue} ${habit.unit || 'times'}` : `Goal: ${habit.goal}x / ${habit.frequency === 'weekly' ? 'week' : 'month'}`}
+                                    {habit.frequency === 'daily' && habit.activeDays ? describeActiveDays(habit.activeDays) : habit.frequency} • {habit.frequency === 'daily' ? `Goal: ${habit.targetValue} ${habit.unit || 'times'}` : `Goal: ${habit.goal}x / ${habit.frequency === 'weekly' ? 'week' : 'month'}`}
                                 </p>
+                                {isRestDay && !isCompletedForDate && (
+                                    <span className="text-[11px] font-bold text-slate-500 bg-slate-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-md">Día libre</span>
+                                )}
                                 <DeltaChips
                                     xp={Math.round(base.xp * rewardMult)}
                                     gold={Math.round(base.gold * rewardMult)}

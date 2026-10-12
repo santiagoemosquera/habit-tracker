@@ -1,6 +1,7 @@
 import { Habit, HabitLog } from '../types';
-import { differenceInDays, differenceInCalendarWeeks, differenceInCalendarMonths, parseISO, startOfDay, isSameDay, isSameWeek, isSameMonth, subDays, subWeeks, subMonths } from 'date-fns';
+import { differenceInDays, differenceInCalendarWeeks, differenceInCalendarMonths, parseISO, startOfDay, isSameDay, isSameWeek, isSameMonth, subDays, subWeeks, subMonths, format } from 'date-fns';
 import { parseLocalDate } from './dateHelpers';
+import { isActiveOn } from '../game/rules';
 
 export function calculateStreak(habit: Habit, logs: HabitLog[]): number {
     if (!logs || logs.length === 0) return 0;
@@ -91,6 +92,9 @@ export function calculateStreak(habit: Habit, logs: HabitLog[]): number {
         else dateToCheck = subMonths(today, i);
 
         const completed = isPeriodCompleted(dateToCheck);
+
+        // Rest days (e.g. weekends for a Mon–Fri habit) are skipped unless done anyway
+        if (habit.frequency === 'daily' && !completed && !isActiveOn(habit, format(dateToCheck, 'yyyy-MM-dd'))) continue;
 
         if (completed) {
             streak++;

@@ -1,6 +1,7 @@
 import { Habit, HabitLog } from '../types';
 import { startOfMonth, endOfMonth, eachDayOfInterval, eachWeekOfInterval, isSameDay, getWeek, endOfWeek, isSameMonth, format } from 'date-fns';
 import { parseLocalDate } from './dateHelpers';
+import { isActiveOn } from '../game/rules';
 
 /**
  * Calculates the compliance percentage for a habit within a given month.
@@ -17,7 +18,9 @@ export const calculateMonthlyCompliance = (habit: Habit, logs: HabitLog[], refer
     const monthLogs = logs.filter(l => isSameMonth(parseLocalDate(l.date), referenceDate));
 
     if (habit.frequency === 'daily') {
-        const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+        const days = eachDayOfInterval({ start: monthStart, end: monthEnd })
+            .filter(day => isActiveOn(habit, format(day, 'yyyy-MM-dd')));
+        if (days.length === 0) return 0;
         // Count days where target was met
         const successfulDays = days.reduce((count, day) => {
             const log = monthLogs.find(l => isSameDay(parseLocalDate(l.date), day));
