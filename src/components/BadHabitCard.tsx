@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { format, subDays } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { motion } from 'framer-motion';
-import { GripVertical, Settings, Trash2, Undo2, Skull, ShieldCheck } from 'lucide-react';
+import { CalendarDays, GripVertical, Settings, Trash2, Undo2, Skull, ShieldCheck } from 'lucide-react';
 import { Habit } from '../types';
 import { useHabits } from '../context/HabitContext';
 import { useGame } from '../context/GameContext';
 import { BAD_PRESETS, computeBadHabitPenalty } from '../game/rules';
 import type { BadSeverity } from '../types/game';
 import { cn } from '../utils/cn';
+import { parseLocalDate } from '../utils/dateHelpers';
 import AddHabitModal from './AddHabitModal';
 import DeltaChips from './game/DeltaChips';
 
@@ -27,8 +29,14 @@ const BadHabitCard: React.FC<BadHabitCardProps> = ({ habit, onDragStart, onDragO
 
     const today = new Date();
     const todayStr = format(today, 'yyyy-MM-dd');
+    // Relapses can be logged on past days too (like good habits)
+    const [selectedDate, setSelectedDate] = useState(todayStr);
+    const dateInput = useRef<HTMLInputElement>(null);
+    const isToday = selectedDate === todayStr;
+    const dayLabel = isToday ? 'hoy' : `el ${format(parseLocalDate(selectedDate), "d 'de' MMM", { locale: es })}`;
+
     const habitLogs = logs.filter(l => l.habitId === habit.id && l.value > 0);
-    const slipsToday = habitLogs.find(l => l.date === todayStr)?.value ?? 0;
+    const slipsOnDate = habitLogs.find(l => l.date === selectedDate)?.value ?? 0;
     const penalty = computeBadHabitPenalty(habit, player?.mode ?? 'normal');
     const severity = BAD_PRESETS[habit.difficulty as BadSeverity] ?? BAD_PRESETS.medium;
 
@@ -50,7 +58,8 @@ const BadHabitCard: React.FC<BadHabitCardProps> = ({ habit, onDragStart, onDragO
                 animate={{ opacity: 1, y: 0 }}
                 className={cn(
                     "bg-white dark:bg-zinc-900 rounded-2xl p-5 border shadow-sm transition-shadow hover:shadow-md group",
-                    slipsToday > 0 ? "border-rose-200 bg-rose-50/30 dark:bg-rose-950/20 dark:border-rose-900" : "border-slate-200 dark:border-zinc-800",
+                    slipsOnDate > 0 ? "border-rose-200 bg-rose-50/30 dark:bg-rose-950/20 dark:border-rose-900" : "border-slate-200 dark:border-zinc-800",
+                    !isToday && "ring-2 ring-rose-100 dark:ring-rose-900",
                     isDragOver && "ring-2 ring-rose-400"
                 )}
                 onDragOver={onDragOver}
@@ -95,24 +104,57 @@ const BadHabitCard: React.FC<BadHabitCardProps> = ({ habit, onDragStart, onDragO
                         </div>
                     </div>
 
-                    <button
-                        onClick={() => toggleHabitCompletion(habit.id, todayStr, slipsToday + 1)}
-                        className="flex-shrink-0 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm shadow-lg shadow-rose-500/30 active:scale-95 transition-all"
-                    >
-                        Caí
-                    </button>
+                    <div className="flex-shrink-0 flex items-center gap-1">
+                        <button
+                            onClick={() => dateInput.current?.showPicker()}
+                            className={cn(
+                                "p-2 rounded-xl transition-colors",
+                                isToday ? "text-slate-300 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-zinc-800" : "text-rose-600 bg-rose-50 dark:bg-rose-500/10"
+                            )}
+                            title="Registrar en otro día"
+                        >
+                            <CalendarDays size={18} />
+                        </button>
+                        <input
+                            ref={dateInput}
+                            type="date"
+                            max={todayStr}
+                            value={selectedDate}
+                            onChange={e => e.target.value && setSelectedDate(e.target.value > todayStr ? todayStr : e.target.value)}
+                            className="sr-only"
+                            tabIndex={-1}
+                            aria-label="Fecha de la recaída"
+                        />
+                        <button
+                            onClick={() => toggleHabitCompletion(habit.id, selectedDate, slipsOnDate + 1)}
+                            className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm shadow-lg shadow-rose-500/30 active:scale-95 transition-all"
+                        >
+                            Caí
+                        </button>
+                    </div>
                 </div>
+
+                {!isToday && (
+                    <div className="mt-3 flex items-center gap-2 text-xs">
+                        <span className="font-bold text-rose-600 bg-rose-50 dark:bg-rose-500/10 px-2 py-0.5 rounded">
+                            Registrando: {format(parseLocalDate(selectedDate), "EEE d 'de' MMM", { locale: es })}
+                        </span>
+                        <button onClick={() => setSelectedDate(todayStr)} className="text-slate-400 hover:text-rose-600 underline">
+                            Volver a hoy
+                        </button>
+                    </div>
+                )}
 
                 <div className="mt-4 flex items-center justify-between text-xs">
                     <span className={cn("flex items-center gap-1 font-bold", cleanDays > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400")}>
                         <ShieldCheck size={14} />
                         {cleanDays} {cleanDays === 1 ? 'día limpio' : 'días limpios'}
                     </span>
-                    {slipsToday > 0 && (
+                    {slipsOnDate > 0 && (
                         <span className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold">
-                            {slipsToday} {slipsToday === 1 ? 'recaída' : 'recaídas'} hoy
+                            {slipsOnDate} {slipsOnDate === 1 ? 'recaída' : 'recaídas'} {dayLabel}
                             <button
-                                onClick={() => toggleHabitCompletion(habit.id, todayStr, slipsToday - 1)}
+                                onClick={() => toggleHabitCompletion(habit.id, selectedDate, slipsOnDate - 1)}
                                 className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-zinc-800"
                                 title="Deshacer la última recaída"
                             >

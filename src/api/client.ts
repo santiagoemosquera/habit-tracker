@@ -101,6 +101,7 @@ export const api = {
         judge: (today: string) => request<{ report: JudgmentDay[]; game: GamePayload }>('/game?action=judge', 'POST', { today }),
         purchase: (data: { rewardId?: string; item?: 'potion' | 'shield'; today: string }) =>
             request<{ game: GamePayload }>('/game?action=purchase', 'POST', data),
+        reset: (today: string) => request<{ game: GamePayload }>('/game?action=reset', 'POST', { today }),
         setMode: (mode: string) => request<{ game: GamePayload }>('/game?action=settings', 'POST', { mode }),
         rewards: {
             list: () => request<Reward[]>('/game?action=rewards'),

@@ -25,6 +25,7 @@ interface GameContextType {
     dismissReport: () => void;
     purchase: (data: { rewardId?: string; item?: 'potion' | 'shield' }) => Promise<boolean>;
     setMode: (mode: DifficultyMode) => Promise<void>;
+    resetGame: () => Promise<void>;
     refresh: () => Promise<void>;
 }
 
@@ -117,12 +118,22 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         applyGame(game);
     }, [applyGame]);
 
+    const resetGame = useCallback(async () => {
+        const { game } = await api.game.reset(todayStr());
+        // Not a level-up: replace the player directly
+        playerRef.current = game.player;
+        setPlayer(game.player);
+        setLevelUp(null);
+        setReport(null);
+        notify('🔄 Partida reiniciada: nivel 1, a empezar de nuevo');
+    }, [notify]);
+
     return (
         <GameContext.Provider value={{
             player, toasts, levelUp, report, gameError, applyGame, notify,
             dismissLevelUp: () => setLevelUp(null),
             dismissReport: () => setReport(null),
-            purchase, setMode, refresh,
+            purchase, setMode, resetGame, refresh,
         }}>
             {children}
         </GameContext.Provider>

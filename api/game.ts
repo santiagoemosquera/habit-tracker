@@ -1,7 +1,7 @@
 import { db } from '../src/db/index.js';
 import { rewards } from '../src/db/schema.js';
 import { eq, asc } from 'drizzle-orm';
-import { GameError, getPlayerState, judgeDays, listHistory, purchase, setDifficultyMode } from '../src/game/engine.js';
+import { GameError, getPlayerState, judgeDays, listHistory, purchase, resetGame, setDifficultyMode } from '../src/game/engine.js';
 
 // Single function for all game actions (Vercel Hobby allows max 12 functions).
 export default async function handler(req: any, res: any) {
@@ -24,6 +24,10 @@ export default async function handler(req: any, res: any) {
         if (action === 'purchase' && req.method === 'POST') {
             const { rewardId, item, today } = req.body;
             return res.status(200).json({ game: await purchase({ rewardId, item }, today) });
+        }
+
+        if (action === 'reset' && req.method === 'POST') {
+            return res.status(200).json({ game: await resetGame(req.body.today) });
         }
 
         if (action === 'settings' && req.method === 'POST') {

@@ -262,18 +262,24 @@ class Game {
         if (diff === 0) return;
         const pen = computeBadHabitPenalty(habit, this.mode);
 
+        // A relapse logged on a day that was already judged cancels the "clean day" XP that day earned
+        const alreadyJudged = !!this.p.lastJudgedDate && date <= this.p.lastJudgedDate && createdDay(habit) <= date;
+        const cleanXp = alreadyJudged ? Math.round(CLEAN_DAY_XP * MODES[this.mode].reward) : 0;
+        const xpFor = (count: number) => (count > 0 ? -cleanXp : 0);
+
         await db.delete(gameEvents).where(and(
             eq(gameEvents.type, 'bad_habit'), eq(gameEvents.sourceId, habit.id), eq(gameEvents.date, date),
         ));
         if (next > 0) {
             await this.insert({
                 type: 'bad_habit', sourceId: habit.id, date, gold: -pen.gold * next, hp: -pen.hp * next,
+                xp: xpFor(next), attribute: cleanXp > 0 ? 'spirit' : null,
                 label: habit.name, meta: { count: next },
             });
         }
         this.deltas.push({
             label: diff > 0 ? `Recaída: ${habit.name}` : `Deshecho: ${habit.name}`,
-            xp: 0, gold: -pen.gold * diff, hp: -pen.hp * diff,
+            xp: xpFor(next) - xpFor(prev), gold: -pen.gold * diff, hp: -pen.hp * diff,
             tone: diff > 0 ? 'penalty' : 'revert',
         });
         await this.applyHp(-pen.hp * diff, date);
@@ -298,6 +304,19 @@ export async function onHabitLogChanged(habitId: string, date: string, prev: num
         ]);
     }
     return g.finish();
+}
+
+/** Starts the game over: wipes XP/gold history and the player, keeping habits, logs, quests and the shop. */
+export async function resetGame(today: string) {
+    const previous = await getPlayerRow();
+    await db.delete(gameEvents);
+    await db.delete(player);
+    const [row] = await db.insert(player).values({
+        difficultyMode: previous.difficultyMode,
+        // Start judging from today so past days aren't punished again
+        lastJudgedDate: fmtDay(subDays(parseDay(today), 1)),
+    }).returning();
+    return { deltas: [], player: await getPlayerState(row) } as GamePayload;
 }
 
 export async function setDifficultyMode(mode: string) {

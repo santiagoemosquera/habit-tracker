@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Coins, Flame, Heart, Shield } from 'lucide-react';
+import { Coins, Flame, Heart, RotateCcw, Shield } from 'lucide-react';
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer } from 'recharts';
 import { api } from '../api/client';
 import { useGame } from '../context/GameContext';
@@ -17,7 +17,8 @@ const EVENT_ICONS: Record<string, string> = {
 };
 
 const CharacterView: React.FC = () => {
-    const { player, setMode, notify } = useGame();
+    const { player, setMode, resetGame, notify } = useGame();
+    const [resetting, setResetting] = useState(false);
     const [history, setHistory] = useState<GameEvent[]>([]);
 
     useEffect(() => {
@@ -45,6 +46,24 @@ const CharacterView: React.FC = () => {
             await setMode(mode);
         } catch {
             notify('No se pudo cambiar el modo');
+        }
+    };
+
+    const restart = async () => {
+        const answer = prompt(
+            'Esto borra tu nivel, XP, oro, vida, combo, escudos e historial de recompensas.\n' +
+            'Se conservan tus hábitos, sus registros, las misiones y los premios de la tienda.\n\n' +
+            'Escribí REINICIAR para confirmar:'
+        );
+        if (answer?.trim().toUpperCase() !== 'REINICIAR') return;
+        setResetting(true);
+        try {
+            await resetGame();
+            setHistory([]);
+        } catch {
+            notify('No se pudo reiniciar la partida');
+        } finally {
+            setResetting(false);
         }
     };
 
@@ -191,6 +210,22 @@ const CharacterView: React.FC = () => {
                         ))}
                     </div>
                 )}
+            </section>
+
+            {/* Danger zone */}
+            <section className="rounded-3xl border border-red-200 dark:border-red-900/60 p-5">
+                <h3 className="font-bold text-lg text-red-600 dark:text-red-400">Empezar de cero</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                    Volvés a nivel 1 con 0 de oro y la vida llena. Se borra el historial del juego, pero tus hábitos,
+                    sus registros, las misiones y los premios de la tienda se mantienen. No se puede deshacer.
+                </p>
+                <button
+                    onClick={restart}
+                    disabled={resetting}
+                    className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 font-bold text-sm hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-50"
+                >
+                    <RotateCcw size={16} /> {resetting ? 'Reiniciando…' : 'Reiniciar partida'}
+                </button>
             </section>
         </div>
     );
